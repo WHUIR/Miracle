@@ -4,8 +4,6 @@ import os
 import pickle
 from tqdm import tqdm
 from termcolor import cprint
-import random
-import numpy as np
 
 
 class PretrainDataloader:
@@ -119,8 +117,8 @@ class PretrainDataset(Dataset):
         self.neg_count = config['neg_count'] if mode == 'train' else config['test_neg_count']
         self.use_text_emb = config['use_text_emb']
         self.config = config
-        if self.mode != 'train' and type(self.neg_count) is int and self.config['stage'] == 'pretrain':
-            self.neg_sample = pickle.load(open(config['data_path'] + config['dataset'] + '/' + f'{self.mode}.negs', 'rb'))
+        if self.mode == 'valid' and type(self.neg_count) is int and self.config['stage'] == 'pretrain':
+            self.neg_sample = torch.randint(low=0, high=self.item_count - 1, size=(len(self.example_list), self.neg_count)).tolist()
             assert len(self.neg_sample) == len(self.example_list)
         else:
             self.neg_sample = None
@@ -143,17 +141,6 @@ class PretrainDataset(Dataset):
                len(item_seq)
 
     def collate_fn(self, batch):
-        """
-        :param batch:
-            每个Example是一个List
-                idx0: item_seq [list of int]
-                idx3: user_id [int]
-                idx4: label [int]
-                idx5: negs  [List of int]
-                idx6: seq_len [int]
-        :return:
-        """
-
         item_seqs = []
         users_id = []
         labels = []
@@ -166,8 +153,6 @@ class PretrainDataset(Dataset):
             negs.append(example[3])
             lengths.append(example[4])
 
-
-
         return {
             'item_seqs': torch.tensor(item_seqs),
             'users': torch.tensor(users_id),
@@ -175,15 +160,3 @@ class PretrainDataset(Dataset):
             'neg_items': torch.tensor(negs),
             'lengths': torch.tensor(lengths),
         }
-
-
-if __name__ == '__main__':
-    from parser import get_config
-    config = get_config()
-    config['device'] = torch.device('cuda:' + str(config['gpu_id']))
-    config['use_text_emb'] = False
-    dataloader = PretrainDataloader(config)
-    train_dataloader, valid_dataloader, test_dataloader = dataloader.generate_dataloader(config)
-    for i in range(10):
-        for data in tqdm(valid_dataloader):
-            pass

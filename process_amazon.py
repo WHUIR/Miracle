@@ -452,7 +452,7 @@ def clean_data():
                             help='Pantry / Scientific / Instruments / Arts / Office')
         parser.add_argument('--user_k', type=int, default=5, help='user k-core filtering')
         parser.add_argument('--item_k', type=int, default=5, help='item k-core filtering')
-        parser.add_argument('--input_path', type=str, default='/data1/tangzuoli/datasets/Amazon/')
+        parser.add_argument('--input_path', type=str, default='./dataset/')
         parser.add_argument('--output_path', type=str, default='./dataset/')
         parser.add_argument('--gpu_id', type=int, default=0, help='ID of running GPU')
         parser.add_argument('--plm_name', type=str, default='bert-base-uncased')
@@ -462,8 +462,8 @@ def clean_data():
 
     args = parse_args()
 
-    datasets = ["Scientific", "Pantry", "Scientific", "Instruments", "Arts", "Office", ] + ["Food", "Home", "CDs", "Kindle", "Movies"]
-    # datasets = ["Office"]
+    datasets = ["Scientific", "Pantry", "Instruments", "Arts", "Office", ] + ["Food", "Home", "CDs", "Kindle", "Movies"]
+    # datasets = ["Scientific"]
     for dataset in datasets:
         args.dataset = dataset
 

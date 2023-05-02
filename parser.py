@@ -15,14 +15,13 @@ def parse_args():
 
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--cuda', type=bool, default=True)
-    parser.add_argument('--load_model_path', type=str, default='./saved_model/2-13-50-10/pretrain-2.pkl')
+    parser.add_argument('--load_model_path', type=str, default='')
 
     parser.add_argument('--save_flag', type=int, default=1)
     parser.add_argument('--flag_step', type=int, default=10)
     parser.add_argument('--start_epoch', type=int, default=0)
     parser.add_argument('--epoch', type=int, default=5)
 
-    parser.add_argument('--aspect_k', type=int)
     parser.add_argument('--aspects', type=int)
     parser.add_argument('--balance_alpha', type=float)
     parser.add_argument('--stage', type=str)
@@ -58,7 +57,7 @@ def parser_dic():
         'regs': 0,
         'lr': 0.001,
         'save_step': 2,
-        'freeze': True,  # todo
+        'freeze': True,
     }
 
     model_dic = {
@@ -74,17 +73,11 @@ def parser_dic():
         "initializer_range": 0.02,
         "loss_type": 'CE',
 
-        'adapter_inner_size': 100,
-
-        'mmoe_t': 0.05,
         'aspect_cons_tau': 0.1,
         'aspects': 32,
-        'max_interests': 5,
-        'aspect_k': 1,
         'aspect_alpha': 0.01,
 
         'balance_alpha': 10,
-        'infinity_alpha': 0,
         'noise_scale': 0.2,
 
         'disen_alpha': 1e-2,
@@ -123,7 +116,6 @@ def get_config():
 
     parameter_dict = parser_dic()
 
-    # args中的优先级是最高的
     for key in args_dic.keys():
         if args_dic[key] is not None:
             parameter_dict[key] = args_dic[key]

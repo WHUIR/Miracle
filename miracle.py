@@ -7,9 +7,6 @@ from torch import nn
 
 
 class PWLayer(nn.Module):
-    """Single Parametric Whitening Layer
-    """
-
     def __init__(self, input_size, output_size, dropout=0.0):
         super(PWLayer, self).__init__()
 
@@ -28,9 +25,6 @@ class PWLayer(nn.Module):
 
 
 class MoEAdaptorLayer(nn.Module):
-    """MoE-enhanced Adaptor
-    """
-
     def __init__(self, n_exps, layers, dropout=0.0, noise=True):
         super(MoEAdaptorLayer, self).__init__()
 
@@ -74,17 +68,12 @@ class TimeAwareAttention(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(self.hidden_size, 1)
         )
-        self.tau = config['aspect_k']
+        self.tau = 1
 
     def forward(self, seq_output, item_seq):
-        # seq_output: bs * len * topk * hidden_size
-        # item_seq: bs * len * topk
-
         position_ids = torch.arange(seq_output.size(1), dtype=torch.long, device=seq_output.device)
         position_ids = position_ids.view(1, -1, 1)
-        # position_ids = position_ids.unsqueeze(0).repeat(seq_output.size()[0], 1)
         position_embedding = self.position_embedding(position_ids)
-        # tma_inputs = position_embedding
         tma_inputs = position_embedding + seq_output
         tma_weight = self.attn_linear(tma_inputs).squeeze(-1) / self.tau
 
@@ -104,9 +93,7 @@ class MultiInterestExtractor(nn.Module):
 
         self.time_aware_attn = TimeAwareAttention(config)
 
-        self.aspect_k = config['aspect_k']
         self.aspects = config['aspects']
-        # self.tau = config['mmoe_t']
         self.tau = 1
         self.noise_scale = config['noise_scale']
         self.device = config['device']
@@ -116,14 +103,14 @@ class MultiInterestExtractor(nn.Module):
 
     def forward_sequence(self, item_emb, item_seq, aspect_mask=None):
         batch_size, seq_len = item_emb.size()[0], item_emb.size()[1]
-        tma_weight = self.time_aware_attn(item_emb.unsqueeze(-2), item_seq.unsqueeze(-1))  # bs * len *
+        tma_weight = self.time_aware_attn(item_emb.unsqueeze(-2), item_seq.unsqueeze(-1))
 
-        gates = self.generate_gates(item_emb)  # batch_size * seq_len * pool
+        gates = self.generate_gates(item_emb)
 
         if aspect_mask is None:
-            topk_gates, topk_gates_idx = torch.topk(gates, dim=-1, k=self.aspect_k)
-            src = torch.ones([batch_size, seq_len * self.aspect_k], device=self.device)
-            src = torch.masked_fill(src, item_seq.unsqueeze(-1).repeat(1, 1, self.aspect_k).view(batch_size, -1) == 0,
+            topk_gates, topk_gates_idx = torch.topk(gates, dim=-1, k=1)
+            src = torch.ones([batch_size, seq_len], device=self.device)
+            src = torch.masked_fill(src, item_seq.unsqueeze(-1).view(batch_size, -1) == 0,
                                     0)
             aspect_mask = scatter_add(src,
                                       topk_gates_idx.view(batch_size, -1),
@@ -131,13 +118,12 @@ class MultiInterestExtractor(nn.Module):
             aspect_mask = aspect_mask == 0
         else:
             aspect_mask = aspect_mask
-        item_moe_emb = F.tanh(self.linear(item_emb)) + item_emb  # bs * len * hiddens
+        item_moe_emb = F.tanh(self.linear(item_emb)) + item_emb
         item_moe_emb = self.ln(self.moe_dropout(item_moe_emb))
         item_moe_emb = item_moe_emb.unsqueeze(2)
 
-        bij = gates  # bs * len * aspects
-        # bij = torch.randn(size=[batch_size, seq_len, self.aspects], device=self.device)
-        interest_capsule = self.aspect_embs.weight.unsqueeze(0).repeat(batch_size, 1, 1)  # bs * aspects * hiddens
+        bij = gates
+        interest_capsule = self.aspect_embs.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         for i in range(self.caps_layers):
             seq_mask = item_seq == 0
             cij = torch.masked_fill(bij, aspect_mask.unsqueeze(1), -1e9)
@@ -145,13 +131,13 @@ class MultiInterestExtractor(nn.Module):
             cij = torch.masked_fill(cij, seq_mask.unsqueeze(-1), 0)
             interest_capsule = torch.sum(
                 cij.unsqueeze(-1) * item_moe_emb * tma_weight.unsqueeze(-1),
-                dim=1)  # batch_size * ins * hidden_size
+                dim=1)
             cap_norm = torch.sum(torch.pow(interest_capsule, 2), dim=-1, keepdim=True)
             scalar_factor = cap_norm / (1 + cap_norm) / torch.sqrt(cap_norm + 1e-9)
             interest_capsule = scalar_factor * interest_capsule
 
             # Squash
-            delta_weight = (item_moe_emb * interest_capsule.unsqueeze(1)).sum(dim=-1)  # batch_size * len * ins
+            delta_weight = (item_moe_emb * interest_capsule.unsqueeze(1)).sum(dim=-1)
             bij = bij + delta_weight
 
         return interest_capsule, F.softmax(gates / self.tau, dim=-1), aspect_mask
@@ -217,10 +203,8 @@ class Miracle(SequentialRecommender):
         self.neg_count = config['neg_count']
         self.item_embs = None
         self.balance_alpha = config['balance_alpha']
-        self.aspect_k = config['aspect_k']
         self.aspects = config['aspects']
         self.time_aware_attn = TimeAwareAttention(config)
-        self.max_interests = config['max_interests']
         self.moe_dropout = nn.Dropout(p=config['moe_dropout'])
         self.aspect_cons_tau = config['aspect_cons_tau']
         self.aspect_alpha = config['aspect_alpha']
@@ -245,8 +229,6 @@ class Miracle(SequentialRecommender):
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -268,18 +250,14 @@ class Miracle(SequentialRecommender):
         return trm_output[-1]
 
     def forward(self, item_seq, item_seq_len):
-        batch_size = item_seq.size(0)
-
-        item_emb = self.moe_adaptor(self.plm_embedding[item_seq].to(self.device))  # batch_size * seq_len * hidden_size
+        item_emb = self.moe_adaptor(self.plm_embedding[item_seq].to(self.device))
         if self.stage == 'trans':
             item_emb = item_emb + self.item_embedding(item_seq)
-
         # Sequential
-        seq_output = self.seq_encode(item_seq, item_emb, item_seq_len)  # batch_size * seq_len * hidden_size
-
+        seq_output = self.seq_encode(item_seq, item_emb, item_seq_len)
         # MoE
         interests, gates, aspect_mask = self.mi_extractor.forward_sequence(seq_output,
-                                                                           item_seq)  # batch_size * seq_len * topk * hidden_size
+                                                                           item_seq)
 
         return interests, gates, aspect_mask
 
@@ -294,15 +272,14 @@ class Miracle(SequentialRecommender):
 
         item_seq = interaction['item_seqs']
         item_seq_len = interaction['lengths']
-        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)  # bs * aspects * hidden_size
+        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)
 
-        # Pretrain默认对比学习损失
         pos_items = interaction['labels']
         total_embs, item_gates = self.mi_extractor.forward_item(
-            self.moe_adaptor(self.plm_embedding[pos_items].to(self.device)))  # bs * aspects * hidden_size
+            self.moe_adaptor(self.plm_embedding[pos_items].to(self.device)))
         total_embs = total_embs.squeeze(1)
 
-        total_score = interests.transpose(0, 1) @ total_embs.permute(1, 2, 0)  # aspects * bs * bs
+        total_score = interests.transpose(0, 1) @ total_embs.permute(1, 2, 0)
         total_score = torch.masked_fill(total_score, aspect_mask.t().unsqueeze(-1), -100)
         loss = F.cross_entropy(total_score.max(dim=0)[0],
                                torch.arange(total_embs.size()[0], device=self.device))
@@ -316,20 +293,17 @@ class Miracle(SequentialRecommender):
             loss + self.balance_alpha * balance_loss + self.aspect_alpha * aspect_contrastive_loss + self.seq_cons_alpha * mi_cs_loss]
 
     def calculate_downstream_loss(self, interaction):
-        batch_size = interaction['item_seqs'].size()[0]
-
         item_seq = interaction['item_seqs']
         item_seq_len = interaction['lengths']
-        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)  # bs * aspects * hidden_size
-        # Pretrain默认对比学习损失
+        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)
         total_embs = self.moe_adaptor(self.plm_embedding.to(self.device))
         if self.stage == 'trans':
             total_embs = total_embs + self.item_embedding.weight
-        total_embs, item_gates = self.mi_extractor.forward_item(total_embs)  # n_items * aspects * hidden_size
+        total_embs, item_gates = self.mi_extractor.forward_item(total_embs)
         total_embs = total_embs.squeeze(1)
 
-        total_score = interests.transpose(0, 1) @ total_embs.permute(1, 2, 0)  # aspects * bs * n_items
-        total_score = total_score.permute(1, 2, 0)  # bs * n_items * aspects
+        total_score = interests.transpose(0, 1) @ total_embs.permute(1, 2, 0)
+        total_score = total_score.permute(1, 2, 0)
         total_score = torch.masked_fill(total_score, aspect_mask.unsqueeze(1), -100)
         total_score = torch.max(total_score, dim=-1)[0]
         loss = F.cross_entropy(total_score,
@@ -341,21 +315,17 @@ class Miracle(SequentialRecommender):
         return [loss + self.balance_alpha * balance_loss + self.aspect_alpha * aspect_contrastive_loss]
 
     def predict(self, interaction):
-        batch_size = interaction['item_seqs'].size()[0]
-
         item_seq = interaction['item_seqs']
         item_seq_len = interaction['lengths']
-        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)  # bs * aspects * hidden_size
+        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)
 
         pos_items = interaction['labels']
         neg_items = interaction['neg_items']
 
         total_items = torch.cat([pos_items.unsqueeze(-1), neg_items], dim=1)
-        # bs * neg_count * aspects * hidden_size
         total_embs, item_gates = self.mi_extractor.forward_item(
             self.moe_adaptor(self.plm_embedding[total_items].to(self.device)))
 
-        # bs * neg_count * aspects
         total_score = (interests.unsqueeze(1) * total_embs).sum(dim=-1)
         mi_logits = torch.masked_fill(total_score, aspect_mask.unsqueeze(1), -100)
 
@@ -363,19 +333,17 @@ class Miracle(SequentialRecommender):
         return logits, torch.zeros(interaction['labels'].size()[0])
 
     def full_sort_predict(self, interaction):
-        batch_size = interaction['item_seqs'].size()[0]
-
         item_seq = interaction['item_seqs']
         item_seq_len = interaction['lengths']
-        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)  # bs * aspects * hidden_size
+        interests, moe_gates, aspect_mask = self.forward(item_seq, item_seq_len)
 
         total_embs = self.moe_adaptor(self.plm_embedding.to(self.device))
         if self.stage == 'trans':
             total_embs = total_embs + self.item_embedding.weight
         total_embs, item_gates = self.mi_extractor.forward_item(total_embs)
-        total_embs = total_embs.squeeze(1)  # item_count * aspects * hidden_size
-        total_score = interests.transpose(0, 1) @ total_embs.permute(1, 2, 0)  # aspects * bs * item_count
-        total_score = total_score.permute(1, 2, 0)  # bs * item_count * aspects
+        total_embs = total_embs.squeeze(1)
+        total_score = interests.transpose(0, 1) @ total_embs.permute(1, 2, 0)
+        total_score = total_score.permute(1, 2, 0)
         total_score = torch.masked_fill(total_score, aspect_mask.unsqueeze(1), -100)
         total_score = torch.max(total_score, dim=-1)[0]
         return total_score, interaction['labels']
@@ -403,14 +371,13 @@ class Miracle(SequentialRecommender):
         item_seq, item_seq_len = interaction['item_seqs'], interaction['lengths']
         item_seq_aug, item_seq_len_aug, seq_aug_mask = self.seq_aug(item_seq, item_seq_len)
         item_emb_aug = self.moe_adaptor(
-            self.plm_embedding[item_seq_aug].to(self.device))  # batch_size * seq_len * hidden_size
+            self.plm_embedding[item_seq_aug].to(self.device))
         item_emb_aug[item_seq_aug == self.mask_idx] = self.mask_param.data
         seq_output_aug = self.seq_encode(item_seq_aug, item_emb_aug,
-                                         item_seq_len_aug)  # batch_size * seq_len * hidden_size
-
+                                         item_seq_len_aug)
         interests_aug, gates_aug, aspect_mask_aug = self.mi_extractor.forward_sequence(seq_output_aug,
                                                                                        item_seq,
-                                                                                       aspect_mask)  # batch_size * seq_len * topk * hidden_size
+                                                                                       aspect_mask)
 
         mask_item_gates = gates[item_seq_aug == self.mask_idx]
         _, mask_item_gates_max_idx = mask_item_gates.max(dim=-1)

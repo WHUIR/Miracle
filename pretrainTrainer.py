@@ -138,7 +138,7 @@ class PretrainTrainer(object):
             else:
                 batch_score, batch_label = self.model.full_sort_predict(data)
             predict_score.append(batch_score.cpu())
-            label.append(batch_label.cpu())  # 进行负采样
+            label.append(batch_label.cpu())
         recall = cal_recall(label, predict_score, self.config['ks'])
         ndcg = cal_ndcg(label, predict_score, self.config['ks'])
         t1 = time()
