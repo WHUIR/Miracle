@@ -13,7 +13,7 @@ Codes for SIGIR 2023 Full Paper-**Towards Multi-Interest Pre-training with Spars
  Notes: the train_batch_size hyperparameter is important, if you modify this hyperparameter, you may get unexpected results due to overfitting. The FHCKM means the mixed pretrain dataset.
  
 ## Step4. Run Downstream:
-  You can test the model by **run main.py --dataset=Scientific --gpu_id=0--epoch=100 --stage=trans --train_batch_size=1024 --load_model_path='{pretrain_model_path in Step3}'**
+  You can test the model by **python main.py --dataset=Scientific --gpu_id=0--epoch=100 --stage=trans --train_batch_size=1024 --load_model_path='{pretrain_model_path in Step3}'**
   
   Notes: the load_model_path parameter is printed in Step3, please use the checkpoint ending with "pretrain-2.pkl"(which pretrain for 3 epochs), such as "./saved_model/2-13-50-10/pretrain-2.pkl"
 
