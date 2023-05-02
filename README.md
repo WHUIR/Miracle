@@ -2,7 +2,7 @@
 Codes for SIGIR 2023 Full Paper-**Towards Multi-Interest Pre-training with Sparse Capsule Network**
 
 ## Step1. Download the Datasets:
-  Firstly, create a folder named "dataset". Then, within the "dataset" folder, create two subfolders named "Ratings" and "Metadata" respectively. Then you can donwload the dataset from [Amazon](https://nijianmo.github.io/amazon/index.html). The .csv files should be placed in the "Ratings" folder, while meta_\*.json.gz files should be placed in the "Metadata" folder. Thanks to [UniSRec](https://github.com/RUCAIBox/UniSRec) for providing another link to download datasets from cloud disks
+  Firstly, create a folder named "dataset" in the current directory. Then, within the "dataset" folder, create two subfolders named "Ratings" and "Metadata" respectively. Then you can donwload the dataset from [Amazon](https://nijianmo.github.io/amazon/index.html). The .csv files should be placed in the "Ratings" folder, while meta_\*.json.gz files should be placed in the "Metadata" folder. Thanks to [UniSRec](https://github.com/RUCAIBox/UniSRec) for providing another link to download datasets from cloud disks
  
 ## Step2. Process Datasets:
   You only needs *run process_amazon.py* to process the raw datasets if you placed the dataset as required in Step1.
