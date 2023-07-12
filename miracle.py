@@ -181,7 +181,7 @@ class Miracle(SequentialRecommender):
         if self.stage == 'trans':
             self.item_embedding = nn.Embedding(self.n_items, self.hidden_size)
         self.position_embedding = nn.Embedding(self.max_seq_length, self.hidden_size)
-        self.plm_embedding = config['text_emb']
+        self.plm_embedding = config['text_emb'].to(self.device)
 
         self.trm_encoder = TransformerEncoder(
             n_layers=config['n_layers'],
